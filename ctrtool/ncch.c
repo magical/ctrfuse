@@ -324,7 +324,7 @@ void ncch_process(ncch_context* ctx, u32 actions)
 		ncch_verify(ctx, actions);
 
 	if (actions & InfoFlag)
-		ncch_print(ctx);		
+		ncch_print(ctx, stdout);
 
 	if (actions & ExtractFlag)
 	{
@@ -507,7 +507,7 @@ static const char* contenttypetostring(unsigned char flags)
 
 
 
-void ncch_print(ncch_context* ctx)
+void ncch_print(ncch_context* ctx, FILE* fp)
 {
 	char magic[5];
 	char productcode[0x11];
@@ -516,67 +516,67 @@ void ncch_print(ncch_context* ctx)
 	u32 mediaunitsize = ncch_get_mediaunit_size(ctx);
 
 
-	fprintf(stdout, "\nNCCH:\n");
+	fprintf(fp, "\nNCCH:\n");
 	memcpy(magic, header->magic, 4);
 	magic[4] = 0;
 	memcpy(productcode, header->productcode, 0x10);
 	productcode[0x10] = 0;
 
-	fprintf(stdout, "Header:                 %s\n", magic);
+	fprintf(fp, "Header:                 %s\n", magic);
 	if (ctx->headersigcheck == Unchecked)
-		memdump(stdout, "Signature:              ", header->signature, 0x100);
+		memdump(fp, "Signature:              ", header->signature, 0x100);
 	else if (ctx->headersigcheck == Good)
-		memdump(stdout, "Signature (GOOD):       ", header->signature, 0x100);
+		memdump(fp, "Signature (GOOD):       ", header->signature, 0x100);
 	else
-		memdump(stdout, "Signature (FAIL):       ", header->signature, 0x100);
-	fprintf(stdout, "Content size:           0x%08x\n", getle32(header->contentsize)*mediaunitsize);
-	fprintf(stdout, "Partition id:           %016llx\n", getle64(header->partitionid));
-	fprintf(stdout, "Maker code:             %04x\n", getle16(header->makercode));
-	fprintf(stdout, "Version:                %04x\n", getle16(header->version));
-	fprintf(stdout, "Program id:             %016llx\n", getle64(header->programid));
-	fprintf(stdout, "Temp flag:              %02x\n", header->tempflag);
-	fprintf(stdout, "Product code:           %s\n", productcode);
-	fprintf(stdout, "Exheader size:          %08x\n", getle32(header->extendedheadersize));
+		memdump(fp, "Signature (FAIL):       ", header->signature, 0x100);
+	fprintf(fp, "Content size:           0x%08x\n", getle32(header->contentsize)*mediaunitsize);
+	fprintf(fp, "Partition id:           %016llx\n", getle64(header->partitionid));
+	fprintf(fp, "Maker code:             %04x\n", getle16(header->makercode));
+	fprintf(fp, "Version:                %04x\n", getle16(header->version));
+	fprintf(fp, "Program id:             %016llx\n", getle64(header->programid));
+	fprintf(fp, "Temp flag:              %02x\n", header->tempflag);
+	fprintf(fp, "Product code:           %s\n", productcode);
+	fprintf(fp, "Exheader size:          %08x\n", getle32(header->extendedheadersize));
 	if (ctx->exheaderhashcheck == Unchecked)
-		memdump(stdout, "Exheader hash:          ", header->extendedheaderhash, 0x20);
+		memdump(fp, "Exheader hash:          ", header->extendedheaderhash, 0x20);
 	else if (ctx->exheaderhashcheck == Good)
-		memdump(stdout, "Exheader hash (GOOD):   ", header->extendedheaderhash, 0x20);
+		memdump(fp, "Exheader hash (GOOD):   ", header->extendedheaderhash, 0x20);
 	else
-		memdump(stdout, "Exheader hash (FAIL):   ", header->extendedheaderhash, 0x20);
-	fprintf(stdout, "Flags:                  %016llx\n", getle64(header->flags));
-	fprintf(stdout, " > Mediaunit size:      0x%x\n", mediaunitsize);
+		memdump(fp, "Exheader hash (FAIL):   ", header->extendedheaderhash, 0x20);
+	fprintf(fp, "Flags:                  %016llx\n", getle64(header->flags));
+	fprintf(fp, " > Mediaunit size:      0x%x\n", mediaunitsize);
 	if (header->flags[7] & 4)
-		fprintf(stdout, " > Crypto key:          None\n");
+		fprintf(fp, " > Crypto key:          None\n");
 	else if (header->flags[7] & 1)
-		fprintf(stdout, " > Crypto key:          %s\n", programid_is_system(header->programid)? "Fixed":"Zeros");
+		fprintf(fp, " > Crypto key:          %s\n", programid_is_system(header->programid)? "Fixed":"Zeros");
 	else
-		fprintf(stdout, " > Crypto key:          Secure\n");
-	fprintf(stdout, " > Form type:           %s\n", formtypetostring(header->flags[5]));
-	fprintf(stdout, " > Content type:        %s\n", contenttypetostring(header->flags[5]));
+		fprintf(fp, " > Crypto key:          Secure\n");
+	fprintf(fp, " > Form type:           %s\n", formtypetostring(header->flags[5]));
+	fprintf(fp, " > Content type:        %s\n", contenttypetostring(header->flags[5]));
 	if (header->flags[4] & 1)
-		fprintf(stdout, " > Content platform:    CTR\n");
+		fprintf(fp, " > Content platform:    CTR\n");
 	if (header->flags[7] & 2)
-		fprintf(stdout, " > No RomFS mount\n");
+		fprintf(fp, " > No RomFS mount\n");
 
 
-	fprintf(stdout, "Plain region offset:    0x%08x\n", getle32(header->plainregionsize)? offset+getle32(header->plainregionoffset)*mediaunitsize : 0);
-	fprintf(stdout, "Plain region size:      0x%08x\n", getle32(header->plainregionsize)*mediaunitsize);
-	fprintf(stdout, "ExeFS offset:           0x%08x\n", getle32(header->exefssize)? offset+getle32(header->exefsoffset)*mediaunitsize : 0);
-	fprintf(stdout, "ExeFS size:             0x%08x\n", getle32(header->exefssize)*mediaunitsize);
-	fprintf(stdout, "ExeFS hash region size: 0x%08x\n", getle32(header->exefshashregionsize)*mediaunitsize);
-	fprintf(stdout, "RomFS offset:           0x%08x\n", getle32(header->romfssize)? offset+getle32(header->romfsoffset)*mediaunitsize : 0);
-	fprintf(stdout, "RomFS size:             0x%08x\n", getle32(header->romfssize)*mediaunitsize);
-	fprintf(stdout, "RomFS hash region size: 0x%08x\n", getle32(header->romfshashregionsize)*mediaunitsize);
+	fprintf(fp, "Plain region offset:    0x%08x\n", getle32(header->plainregionsize)? offset+getle32(header->plainregionoffset)*mediaunitsize : 0);
+	fprintf(fp, "Plain region size:      0x%08x\n", getle32(header->plainregionsize)*mediaunitsize);
+	fprintf(fp, "ExeFS offset:           0x%08x\n", getle32(header->exefssize)? offset+getle32(header->exefsoffset)*mediaunitsize : 0);
+	fprintf(fp, "ExeFS size:             0x%08x\n", getle32(header->exefssize)*mediaunitsize);
+	fprintf(fp, "ExeFS hash region size: 0x%08x\n", getle32(header->exefshashregionsize)*mediaunitsize);
+	fprintf(fp, "RomFS offset:           0x%08x\n", getle32(header->romfssize)? offset+getle32(header->romfsoffset)*mediaunitsize : 0);
+	fprintf(fp, "RomFS size:             0x%08x\n", getle32(header->romfssize)*mediaunitsize);
+	fprintf(fp, "RomFS hash region size: 0x%08x\n", getle32(header->romfshashregionsize)*mediaunitsize);
 	if (ctx->exefshashcheck == Unchecked)
-		memdump(stdout, "ExeFS Hash:             ", header->exefssuperblockhash, 0x20);
+		memdump(fp, "ExeFS Hash:             ", header->exefssuperblockhash, 0x20);
 	else if (ctx->exefshashcheck == Good)
-		memdump(stdout, "ExeFS Hash (GOOD):      ", header->exefssuperblockhash, 0x20);
+		memdump(fp, "ExeFS Hash (GOOD):      ", header->exefssuperblockhash, 0x20);
 	else
-		memdump(stdout, "ExeFS Hash (FAIL):      ", header->exefssuperblockhash, 0x20);
+		memdump(fp, "ExeFS Hash (FAIL):      ", header->exefssuperblockhash, 0x20);
 	if (ctx->romfshashcheck == Unchecked)
-		memdump(stdout, "RomFS Hash:             ", header->romfssuperblockhash, 0x20);
+		memdump(fp, "RomFS Hash:             ", header->romfssuperblockhash, 0x20);
 	else if (ctx->romfshashcheck == Good)
-		memdump(stdout, "RomFS Hash (GOOD):      ", header->romfssuperblockhash, 0x20);
+		memdump(fp, "RomFS Hash (GOOD):      ", header->romfssuperblockhash, 0x20);
 	else
-		memdump(stdout, "RomFS Hash (FAIL):      ", header->romfssuperblockhash, 0x20);
+		memdump(fp, "RomFS Hash (FAIL):      ", header->romfssuperblockhash, 0x20);
 }

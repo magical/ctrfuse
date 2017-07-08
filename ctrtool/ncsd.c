@@ -61,13 +61,13 @@ void ncsd_process(ncsd_context* ctx, u32 actions)
 	}
 
 	if (actions & InfoFlag)
-		ncsd_print(ctx);
+		ncsd_print(ctx, stdout);
 
 	ncch_set_file(&ctx->ncch, ctx->file);
 	ncch_set_offset(&ctx->ncch, 0x4000);
 	ncch_set_size(&ctx->ncch, ctx->size - 0x4000);
 	ncch_set_usersettings(&ctx->ncch, ctx->usersettings);
-	ncch_process(&ctx->ncch, actions);
+	//ncch_process(&ctx->ncch, actions);
 }
 
 unsigned int ncsd_get_mediaunit_size(ncsd_context* ctx)
@@ -80,7 +80,7 @@ unsigned int ncsd_get_mediaunit_size(ncsd_context* ctx)
 	return mediaunitsize;
 }
 
-void ncsd_print(ncsd_context* ctx)
+void ncsd_print(ncsd_context* ctx, FILE* fp)
 {
 	char magic[5];
 	ctr_ncsdheader* header = &ctx->header;
@@ -91,19 +91,19 @@ void ncsd_print(ncsd_context* ctx)
 	memcpy(magic, header->magic, 4);
 	magic[4] = 0;
 
-	fprintf(stdout, "Header:                 %s\n", magic);
+	fprintf(fp, "Header:                 %s\n", magic);
 	if (ctx->headersigcheck == Unchecked)
-		memdump(stdout, "Signature:              ", header->signature, 0x100);
+		memdump(fp, "Signature:              ", header->signature, 0x100);
 	else if (ctx->headersigcheck == Good)
-		memdump(stdout, "Signature (GOOD):       ", header->signature, 0x100);
+		memdump(fp, "Signature (GOOD):       ", header->signature, 0x100);
 	else
-		memdump(stdout, "Signature (FAIL):       ", header->signature, 0x100);       
-	fprintf(stdout, "Media size:             0x%08x\n", getle32(header->mediasize));
-	fprintf(stdout, "Media id:               %016llx\n", getle64(header->mediaid));
-	//memdump(stdout, "Partition FS type:      ", header->partitionfstype, 8);
-	//memdump(stdout, "Partition crypt type:   ", header->partitioncrypttype, 8);
-	//memdump(stdout, "Partition offset/size:  ", header->partitionoffsetandsize, 0x40);
-	fprintf(stdout, "\n");
+		memdump(fp, "Signature (FAIL):       ", header->signature, 0x100);       
+	fprintf(fp, "Media size:             0x%08x\n", getle32(header->mediasize));
+	fprintf(fp, "Media id:               %016llx\n", getle64(header->mediaid));
+	//memdump(fp, "Partition FS type:      ", header->partitionfstype, 8);
+	//memdump(fp, "Partition crypt type:   ", header->partitioncrypttype, 8);
+	//memdump(fp, "Partition offset/size:  ", header->partitionoffsetandsize, 0x40);
+	fprintf(fp, "\n");
 	for(i=0; i<8; i++)
 	{
 		u32 partitionoffset = header->partitiongeometry[i].offset * mediaunitsize;
@@ -111,18 +111,18 @@ void ncsd_print(ncsd_context* ctx)
 
 		if (partitionsize != 0)
 		{
-			fprintf(stdout, "Partition %d            \n", i);
-			memdump(stdout, " Id:                    ", header->partitionid+i*8, 8);
-			fprintf(stdout, " Area:                  0x%08X-0x%08X\n", partitionoffset, partitionoffset+partitionsize);
-			fprintf(stdout, " Filesystem:            %02X\n", header->partitionfstype[i]);
-			fprintf(stdout, " Encryption:            %02X\n", header->partitioncrypttype[i]);
-			fprintf(stdout, "\n");
+			fprintf(fp, "Partition %d            \n", i);
+			memdump(fp, " Id:                    ", header->partitionid+i*8, 8);
+			fprintf(fp, " Area:                  0x%08X-0x%08X\n", partitionoffset, partitionoffset+partitionsize);
+			fprintf(fp, " Filesystem:            %02X\n", header->partitionfstype[i]);
+			fprintf(fp, " Encryption:            %02X\n", header->partitioncrypttype[i]);
+			fprintf(fp, "\n");
 		}
 	}
-	memdump(stdout, "Extended header hash:   ", header->extendedheaderhash, 0x20);
-	memdump(stdout, "Additional header size: ", header->additionalheadersize, 4);
-	memdump(stdout, "Sector zero offset:     ", header->sectorzerooffset, 4);
-	memdump(stdout, "Flags:                  ", header->flags, 8);
-	fprintf(stdout, " > Mediaunit size:      0x%X\n", mediaunitsize);
+	memdump(fp, "Extended header hash:   ", header->extendedheaderhash, 0x20);
+	memdump(fp, "Additional header size: ", header->additionalheadersize, 4);
+	memdump(fp, "Sector zero offset:     ", header->sectorzerooffset, 4);
+	memdump(fp, "Flags:                  ", header->flags, 8);
+	fprintf(fp, " > Mediaunit size:      0x%X\n", mediaunitsize);
 
 }

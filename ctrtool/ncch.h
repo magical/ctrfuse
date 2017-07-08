@@ -82,7 +82,7 @@ u32 ncch_get_romfs_offset(ncch_context* ctx);
 u32 ncch_get_romfs_size(ncch_context* ctx);
 u32 ncch_get_exheader_offset(ncch_context* ctx);
 u32 ncch_get_exheader_size(ncch_context* ctx);
-void ncch_print(ncch_context* ctx);
+void ncch_print(ncch_context* ctx, FILE* file);
 int ncch_signature_verify(ncch_context* ctx, rsakey2048* key);
 void ncch_verify(ncch_context* ctx, u32 flags);
 void ncch_save(ncch_context* ctx, u32 type, u32 flags);
