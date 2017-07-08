@@ -4,7 +4,7 @@ TINYXML_OBJS = tinyxml/tinystr.o tinyxml/tinyxml.o tinyxml/tinyxmlerror.o tinyxm
 LIBS = -lstdc++ -lfuse
 CXXFLAGS = -I. 
 CFLAGS = -Wall -I.
-OUTPUT = ctrtool
+OUTPUT = ctrfuse
 CC = gcc
 
 main: $(OBJS) $(POLAR_OBJS) $(TINYXML_OBJS)
