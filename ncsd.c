@@ -67,7 +67,7 @@ void ncsd_process(ncsd_context* ctx, u32 actions)
 	ncch_set_offset(&ctx->ncch, 0x4000);
 	ncch_set_size(&ctx->ncch, ctx->size - 0x4000);
 	ncch_set_usersettings(&ctx->ncch, ctx->usersettings);
-	//ncch_process(&ctx->ncch, actions);
+	ncch_process(&ctx->ncch, actions);
 }
 
 unsigned int ncsd_get_mediaunit_size(ncsd_context* ctx)

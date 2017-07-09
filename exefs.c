@@ -74,56 +74,37 @@ void exefs_determine_key(exefs_context* ctx, u32 actions)
 	}
 }
 
-void exefs_save(exefs_context* ctx, u32 index, u32 flags)
+ssize_t exefs_read(exefs_context* ctx, u32 index, u32 flags, char* buf, off_t bufoffset, size_t bufsize)
 {
 	exefs_sectionheader* section = (exefs_sectionheader*)(ctx->header.section + index);
-	char outfname[MAX_PATH];
 	char name[64];
 	u32 offset;
 	u32 size;
-	FILE* fout;
 	u32 compressedsize = 0;
 	u32 decompressedsize = 0;
 	u8* compressedbuffer = 0;
 	u8* decompressedbuffer = 0;
-	filepath* dirpath = 0;
-	
 	
 	offset = getle32(section->offset) + sizeof(exefs_header);
 	size = getle32(section->size);
-	dirpath = settings_get_exefs_dir_path(ctx->usersettings);
 
-	if (size == 0 || dirpath == 0 || dirpath->valid == 0)
-		return;
+	fprintf(stderr, "size = %d\n", size);
+
+	if (bufoffset > size) {
+		return 0;
+	}
+
+	if (size == 0)
+		return 0;
 
 	if (size >= ctx->size)
 	{
 		fprintf(stderr, "Error, ExeFS section %d size invalid\n", index);
-		return;
+		return 0;
 	}
 
 	memset(name, 0, sizeof(name));
 	memcpy(name, section->name, 8);
-
-	
-	memcpy(outfname, dirpath->pathname, MAX_PATH);
-	strcat(outfname, "/");
-
-	if (name[0] == '.')
-		strcat(outfname, name+1);
-	else
-		strcat(outfname, name);
-	strcat(outfname, ".bin");
-
-	fout = fopen(outfname, "wb");
-
-	if (fout == 0)
-	{
-		fprintf(stderr, "Error, failed to create file %s\n", outfname);
-		goto clean;
-	}
-	
-	
 
 	fseek(ctx->file, ctx->offset + offset, SEEK_SET);
 	ctr_init_counter(&ctx->aes, ctx->key, ctx->counter);
@@ -131,7 +112,7 @@ void exefs_save(exefs_context* ctx, u32 index, u32 flags)
 
 	if (index == 0 && ctx->compressedflag && ((flags & RawFlag) == 0))
 	{
-		fprintf(stdout, "Decompressing section %s to %s...\n", name, outfname);
+		fprintf(stdout, "Decompressing section %s...\n", name);
 
 		compressedsize = size;
 		compressedbuffer = malloc(compressedsize);
@@ -162,17 +143,28 @@ void exefs_save(exefs_context* ctx, u32 index, u32 flags)
 		if (0 == lzss_decompress(compressedbuffer, compressedsize, decompressedbuffer, decompressedsize))
 			goto clean;
 
+		/*
 		if (decompressedsize != fwrite(decompressedbuffer, 1, decompressedsize, fout))
 		{
 			fprintf(stdout, "Error writing output file\n");
 			goto clean;
-		}		
+		}
+		*/
 	}
 	else
 	{
 		u8 buffer[16 * 1024];
+		ssize_t read = 0;
 
-		fprintf(stdout, "Saving section %s to %s...\n", name, outfname);
+		fprintf(stdout, "Saving section %s...\n", name);
+
+		fseek(ctx->file, bufoffset, SEEK_CUR);
+		ctr_add_counter(&ctx->aes, bufoffset / 0x10);
+		// XXX counter not correct if bufoffset not block-aligned
+		size -= bufoffset;
+		if (size > bufsize) {
+			size = bufsize;
+		}
 
 		while(size)
 		{
@@ -189,20 +181,18 @@ void exefs_save(exefs_context* ctx, u32 index, u32 flags)
 			if (ctx->encrypted)
 				ctr_crypt_counter(&ctx->aes, buffer, buffer, max);
 
-			if (max != fwrite(buffer, 1, max, fout))
-			{
-				fprintf(stdout, "Error writing output file\n");
-				goto clean;
-			}
-
+			memmove(buf, buffer, max);
+			buf += max;
 			size -= max;
+			read += max;
 		}
+		return read;
 	}
 
 clean:
 	free(compressedbuffer);
 	free(decompressedbuffer);
-	return;
+	return 0;
 }
 
 void exefs_read_header(exefs_context* ctx, u32 flags)
@@ -247,8 +237,9 @@ void exefs_process(exefs_context* ctx, u32 actions)
 		if (dirpath && dirpath->valid)
 		{
 			makedir(dirpath->pathname);
-			for(i=0; i<8; i++)
-				exefs_save(ctx, i, actions);
+			for(i=0; i<8; i++) {
+				//exefs_save(ctx, i, actions);
+			}
 		}
 	}
 }
