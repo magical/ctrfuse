@@ -32,7 +32,7 @@ struct node {
 	int section;
 
 	// for virtual files
-	void* data;
+	void* data; 
 	size_t size;
 };
 
