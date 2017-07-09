@@ -88,14 +88,12 @@ ssize_t exefs_read(exefs_context* ctx, u32 index, u32 flags, char* buf, off_t bu
 	offset = getle32(section->offset) + sizeof(exefs_header);
 	size = getle32(section->size);
 
-	fprintf(stderr, "size = %d\n", size);
-
-	if (bufoffset > size) {
-		return 0;
-	}
-
 	if (size == 0)
 		return 0;
+
+	if (bufoffset >= size) {
+		return 0;
+	}
 
 	if (size >= ctx->size)
 	{
@@ -153,9 +151,6 @@ ssize_t exefs_read(exefs_context* ctx, u32 index, u32 flags, char* buf, off_t bu
 	}
 	else
 	{
-		u8 buffer[16 * 1024];
-		ssize_t read = 0;
-
 		fprintf(stdout, "Saving section %s...\n", name);
 
 		fseek(ctx->file, bufoffset, SEEK_CUR);
@@ -166,27 +161,15 @@ ssize_t exefs_read(exefs_context* ctx, u32 index, u32 flags, char* buf, off_t bu
 			size = bufsize;
 		}
 
-		while(size)
-		{
-			u32 max = sizeof(buffer);
-			if (max > size)
-				max = size;
-
-			if (max != fread(buffer, 1, max, ctx->file))
-			{
-				fprintf(stdout, "Error reading input file\n");
-				goto clean;
-			}
-
-			if (ctx->encrypted)
-				ctr_crypt_counter(&ctx->aes, buffer, buffer, max);
-
-			memmove(buf, buffer, max);
-			buf += max;
-			size -= max;
-			read += max;
+		if (size != fread(buf, 1, size, ctx->file)) {
+			fprintf(stdout, "Error reading input file\n");
+			goto clean;
 		}
-		return read;
+
+		if (ctx->encrypted)
+			ctr_crypt_counter(&ctx->aes, (u8*)buf, (u8*)buf, size);
+
+		return size;
 	}
 
 clean:
