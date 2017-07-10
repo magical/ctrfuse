@@ -7,6 +7,7 @@
 #include "filepath.h"
 #include "ctr.h"
 #include "exefs.h"
+#include "romfs.h"
 #include "exheader.h"
 #include "settings.h"
 
@@ -61,6 +62,7 @@ typedef struct
 	ctr_ncchheader header;
 	ctr_aes_context aes;
 	exefs_context exefs;
+	romfs_context romfs;
 	exheader_context exheader;
 	int exefshashcheck;
 	int romfshashcheck;

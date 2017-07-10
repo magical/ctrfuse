@@ -96,7 +96,7 @@ void romfs_process(romfs_context* ctx, u32 actions)
 	if (actions & InfoFlag)
 		romfs_print(ctx);
 
-	romfs_visit_dir(ctx, 0, 0, actions, settings_get_romfs_dir_path(ctx->usersettings));
+	//romfs_visit_dir(ctx, 0, 0, actions, settings_get_romfs_dir_path(ctx->usersettings));
 
 }
 

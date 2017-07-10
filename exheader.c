@@ -100,6 +100,8 @@ int exheader_programid_valid(exheader_context* ctx)
 		if (memcmp(ctx->header.arm11systemlocalcaps.programid, ctx->programid, 8))
 		{
 			fprintf(stderr, "Error, program id mismatch. Wrong key?\n");
+			memdump(stderr, "ctx programid:    ", ctx->programid, 8);
+			memdump(stderr, "header programid: ", ctx->header.arm11systemlocalcaps.programid, 8);
 			return 0;
 		}
 	}

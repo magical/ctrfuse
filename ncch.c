@@ -22,6 +22,7 @@ void ncch_init(ncch_context* ctx)
 {
 	memset(ctx, 0, sizeof(ncch_context));
 	exefs_init(&ctx->exefs);
+	romfs_init(&ctx->romfs);
 }
 
 void ncch_set_usersettings(ncch_context* ctx, settings* usersettings)
@@ -280,6 +281,7 @@ void ncch_process(ncch_context* ctx, u32 actions)
 {
 	u8 exheadercounter[16];
 	u8 exefscounter[16];
+	u8 romfscounter[16];
 	int result = 1;
 
 
@@ -296,6 +298,7 @@ void ncch_process(ncch_context* ctx, u32 actions)
 
 	ncch_get_counter(ctx, exheadercounter, NCCHTYPE_EXHEADER);
 	ncch_get_counter(ctx, exefscounter, NCCHTYPE_EXEFS);
+	ncch_get_counter(ctx, romfscounter, NCCHTYPE_ROMFS);
 
 
 	exheader_set_file(&ctx->exheader, ctx->file);
@@ -316,6 +319,15 @@ void ncch_process(ncch_context* ctx, u32 actions)
 	exefs_set_counter(&ctx->exefs, exefscounter);
 	exefs_set_key(&ctx->exefs, ctx->key);
 	exefs_set_encrypted(&ctx->exefs, ctx->encrypted);
+
+	romfs_set_file(&ctx->romfs, ctx->file);
+	romfs_set_offset(&ctx->romfs, ncch_get_romfs_offset(ctx) );
+	romfs_set_size(&ctx->romfs, ncch_get_romfs_size(ctx) );
+	//romfs_set_partitionid(&ctx->romfs, ctx->header.partitionid);
+	romfs_set_usersettings(&ctx->romfs, ctx->usersettings);
+	//romfs_set_counter(&ctx->romfs, romfscounter);
+	//romfs_set_key(&ctx->romfs, ctx->key);
+	//romfs_set_encrypted(&ctx->romfs, ctx->encrypted);
 
 	exheader_read(&ctx->exheader, actions);
 
@@ -346,6 +358,10 @@ void ncch_process(ncch_context* ctx, u32 actions)
 	{
 		exefs_set_compressedflag(&ctx->exefs, exheader_get_compressedflag(&ctx->exheader));
 		exefs_process(&ctx->exefs, actions);
+	}
+
+	if (ncch_get_romfs_size(ctx)) {
+		romfs_process(&ctx->romfs, actions);
 	}
 }
 

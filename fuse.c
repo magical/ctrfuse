@@ -12,12 +12,15 @@
 
 #include "ncsd.h"
 #include "exefs.h"
+#include "romfs.h"
 
 enum {
 	Root,
+	Info,
 	ExefsDir,
 	ExefsSection,
-	Info,
+	RomfsDir,
+	RomfsFile,
 };
 
 struct node {
@@ -31,8 +34,11 @@ struct node {
 	// exefs
 	int section;
 
+	// romfs
+	int diroffset;
+
 	// for virtual files
-	void* data; 
+	char* data;
 	size_t size;
 };
 
@@ -44,6 +50,17 @@ struct context {
 
 const char* strip_prefix(const char* path);
 int path_has_prefix(const char* path, const char* name);
+void ctrfuse_init_romfs(struct node* node);
+struct node* newnode(int type, const char* name);
+
+struct node* newnode(int type, const char* name) {
+	struct node* node = malloc(sizeof(struct node));
+	memset(node, 0, sizeof(struct node));
+	node->type = type;
+	node->name = strdup(name);
+	return node;
+}
+
 
 struct node* lookup(struct context* ctx, const char* path) {
 	struct node* node = ctx->root;
@@ -58,8 +75,14 @@ struct node* lookup(struct context* ctx, const char* path) {
 	}
 
 	while (node != NULL && path[0] != '\0') {
+		fprintf(stderr, "lookup %s\n", path);
+		if (node->type == RomfsDir) {
+			ctrfuse_init_romfs(node);
+		}
 		for (x = node->child; x != NULL; x = x->next) {
+			fprintf(stderr, "lookup %s: visiting %s\n", path, x->name);
 			if (path_has_prefix(path, x->name)) {
+				fprintf(stderr, "lookup %s: found %s\n", path, x->name);
 				path = strip_prefix(path);
 				break;
 			}
@@ -67,6 +90,9 @@ struct node* lookup(struct context* ctx, const char* path) {
 		node = x;
 	}
 
+	if (node && node->type == RomfsDir) {
+		ctrfuse_init_romfs(node);
+	}
 	return node;
 }
 
@@ -96,24 +122,65 @@ int path_has_prefix(const char* path, const char* name) {
 	return (path[i] == '\0' || path[i] == '/') && name[i] == '\0';
 }
 
-int getsize(ncsd_context *ctx) {
-	char *buf;
-	size_t bufsize;
-	FILE *stream = open_memstream(&buf, &bufsize);
-	if (stream == NULL) {
-		perror("open_memstream");
-		return 0;
+void ctrfuse_init_info(struct node* node)
+{
+	char *buf = NULL;
+	size_t size = 0;
+	FILE *stream;
+
+	if (node->type != Info || node->data != NULL) {
+		return;
 	}
 
-	ncsd_print(ctx, stream);
+	stream = open_memstream(&buf, &size);
+	if (stream == NULL) {
+		perror("open_memstream");
+		//return -errno;
+		return;
+	}
+
+	ncsd_print((ncsd_context*)node->ctx, stream);
 
 	if (fclose(stream) < 0) {
 		perror("fclose");
-		return 0;
+		//return -errno;
+		return;
 	}
-	free(buf);
 
-	return bufsize;
+	node->data = buf;
+	node->size = size;
+}
+
+void ctrfuse_init_romfs(struct node* node) {
+	romfs_context* ctx = node->ctx;
+	if (node->type != RomfsDir || node->child != NULL) {
+		return;
+	}
+
+	fprintf(stderr, "initing %d\n", node->diroffset);
+
+	int diroffset = node->diroffset;
+	romfs_direntry entry;
+	if (!romfs_dirblock_readentry(ctx, diroffset, &entry)) {
+		fprintf(stderr, "error reading direntry %d\n", diroffset);
+		return;
+	}
+
+	diroffset = getle32(entry.childoffset);
+	struct node** tail = &node->child;
+	while (diroffset != (u32)~0) {
+		struct node* node;
+		if (!romfs_dirblock_readentry(ctx, diroffset, &entry)) {
+			fprintf(stderr, "error reading direntry %d\n", diroffset);
+			return;
+		}
+		node = newnode(RomfsDir, (char*)entry.name);
+		node->ctx = ctx;
+		node->diroffset = diroffset;
+		*tail = node;
+		tail = &node->next;
+		diroffset = getle32(entry.siblingoffset);
+	}
 }
 
 int ctrfuse_getattr(const char *path, struct stat *stbuf)
@@ -122,19 +189,19 @@ int ctrfuse_getattr(const char *path, struct stat *stbuf)
 	if (strcmp(path, "/") == 0 || strcmp(path, "/romfs") == 0 || strcmp(path, "/exefs") == 0) {
 		stbuf->st_nlink = 2;
 		stbuf->st_mode = S_IFDIR | 0555;
-	} else if (strcmp(path, "/info") == 0) {
-		stbuf->st_nlink = 1;
-		stbuf->st_mode = S_IFREG | 0444;
-		stbuf->st_size = getsize(&ctx->ncsd);
 	} else {
 		struct node* node = lookup(ctx, path);
 		if (node == NULL) {
 			return -ENOENT;
 		}
+		if (node->type == Info) {
+			ctrfuse_init_info(node);
+		}
 		stbuf->st_nlink = 1;
 		stbuf->st_mode = S_IFREG | 0444;
-		if (node->type == ExefsSection) {
-			stbuf->st_size = node->size;
+		stbuf->st_size = node->size;
+		if (node->type == RomfsDir) {
+			stbuf->st_mode = S_IFDIR | 0555;
 		}
 	}
 	return 0;
@@ -151,20 +218,20 @@ int ctrfuse_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t o
 		filler(buf, "exefs", NULL, 0);
 		filler(buf, "romfs", NULL, 0);
 		return 0;
-	}
+	} else {
+		struct node* node;
+		struct node* x;
 
-	if (strcmp(path, "/exefs") == 0) {
-		struct node* node = lookup(ctx, path);
+		node = lookup(ctx, path);
 		if (node == NULL) {
 			return -ENOENT;
 		}
-		struct node* x;
+
 		for (x = node->child; x != NULL; x = x->next) {
 			filler(buf, x->name, NULL, 0);
 		}
 		return 0;
 	}
-
 	return -ENOENT;
 }
 
@@ -172,59 +239,49 @@ int ctrfuse_read(const char *path, char *buf, size_t size, off_t offset, struct 
 {
 	struct context* ctx = fuse_get_context()->private_data;
 
-	if (strcmp(path, "/info") == 0) {
-		char *buf2;
-		size_t bufsize;
-		FILE *stream = open_memstream(&buf2, &bufsize);
-		if (stream == NULL) {
-			perror("open_memstream");
-			return -errno;
-		}
-
-		ncsd_print(&ctx->ncsd, stream);
-		if (fclose(stream) < 0) {
-			perror("fclose");
-			return -errno;
-		}
-
-		if (offset > bufsize) {
-			free(buf2);
-			return 0;
-		}
-
-		if (size > bufsize - offset) {
-			size = bufsize - offset;
-		}
-
-		memmove(buf, buf2+offset, size);
-		free(buf2);
-		return size;
-	} else {
-		struct node* node = lookup(ctx, path);
-		if (node->type == ExefsSection) {
-			exefs_context* exefsctx = &ctx->ncsd.ncch.exefs;
-			int section = node->section;
-			return exefs_read(exefsctx, section, RawFlag, buf, offset, size);
-		}
+	struct node* node = lookup(ctx, path);
+	if (node == NULL) {
+		return -ENOENT;
 	}
+
+	if (node->type == Info) {
+		ctrfuse_init_info(node);
+		if (0 <= offset &&  offset < node->size) { // XXX overflow
+			if (size > node->size - offset) {
+				size = node->size - offset;
+			}
+			memmove(buf, &node->data[offset], size);
+			return size;
+		}
+		return 0;
+	} else if (node->type == ExefsSection) {
+		exefs_context* exefsctx = &ctx->ncsd.ncch.exefs;
+		int section = node->section;
+		return exefs_read(exefsctx, section, RawFlag, buf, offset, size);
+	}
+
 	return 0; // ????
 }
 
-struct node* newnode(int type, const char* name) {
-	struct node* node = malloc(sizeof(struct node));
-	memset(node, 0, sizeof(struct node));
-	node->type = type;
-	node->name = strdup(name);
-	return node;
-}
-
 void make_nodes(struct context* ctx) {
+	struct node* infonode;
+	struct node* exefsnode;
+	struct node* romfsnode;
 	int i;
 	ctx->root = newnode(Root, "/");
-	ctx->root->child = newnode(ExefsDir, "exefs");
+
+	infonode = newnode(Info, "info");
+	exefsnode = newnode(ExefsDir, "exefs");
+	romfsnode = newnode(RomfsDir, "romfs");
+
+	ctx->root->child = infonode;
+	ctx->root->child->next = exefsnode;
+	ctx->root->child->next->next = romfsnode;
+
+	infonode->ctx = &ctx->ncsd;
 
 	exefs_context* exefs = &ctx->ncsd.ncch.exefs;
-	struct node** tail = &ctx->root->child->child;
+	struct node** tail = &exefsnode->child;
 	for (i = 0; i < 8; i++) {
 		if (getle32(exefs->header.section[i].size)) {
 			char name[sizeof exefs->header.section[i].name + 5];
@@ -240,6 +297,9 @@ void make_nodes(struct context* ctx) {
 			tail = &node->next;
 		}
 	}
+
+	romfsnode->diroffset = 0;
+	romfsnode->ctx = &ctx->ncsd.ncch.romfs;
 }
 
 struct fuse_operations fuse_ops =
@@ -269,7 +329,7 @@ int main(int argc, char **argv)
 	filename = argv[1];
 
 	infile = fopen(filename, "rb");
-	if (infile == 0) 
+	if (infile == 0)
 	{
 		fprintf(stderr, "error: could not open input file!\n");
 		return -1;
