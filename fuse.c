@@ -41,7 +41,7 @@ struct node {
 
 	// for virtual files
 	char* data;
-	size_t size;
+	off_t size;
 };
 
 struct context {
@@ -77,14 +77,14 @@ struct node* lookup(struct context* ctx, const char* path) {
 	}
 
 	while (node != NULL && path[0] != '\0') {
-		fprintf(stderr, "lookup %s\n", path);
+		//fprintf(stderr, "lookup %s\n", path);
 		if (node->type == RomfsDir) {
 			ctrfuse_init_romfs(node);
 		}
 		for (x = node->child; x != NULL; x = x->next) {
-			fprintf(stderr, "lookup %s: visiting %s\n", path, x->name);
+			//fprintf(stderr, "lookup %s: visiting %s\n", path, x->name);
 			if (path_has_prefix(path, x->name)) {
-				fprintf(stderr, "lookup %s: found %s\n", path, x->name);
+				//fprintf(stderr, "lookup %s: found %s\n", path, x->name);
 				path = strip_prefix(path);
 				break;
 			}
@@ -202,6 +202,7 @@ void ctrfuse_init_romfs(struct node* node) {
 		free(name);
 		node->ctx = ctx;
 		node->fileoffset = fileoffset;
+		node->size = getle64(entry.datasize);
 		*tail = node;
 		tail = &node->next;
 		fileoffset = getle32(entry.siblingoffset);
@@ -283,6 +284,9 @@ int ctrfuse_read(const char *path, char *buf, size_t size, off_t offset, struct 
 		exefs_context* exefsctx = &ctx->ncsd.ncch.exefs;
 		int section = node->section;
 		return exefs_read(exefsctx, section, RawFlag, buf, offset, size);
+	} else if (node->type == RomfsFile) {
+		romfs_context* romfsctx = node->ctx;
+		return romfs_read_file(romfsctx, node->fileoffset, buf, offset, size);
 	}
 
 	return 0; // ????

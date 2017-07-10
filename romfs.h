@@ -84,6 +84,7 @@ int  romfs_fileblock_readentry(romfs_context* ctx, u32 fileoffset, romfs_fileent
 void romfs_visit_dir(romfs_context* ctx, u32 diroffset, u32 depth, u32 actions, filepath* rootpath);
 void romfs_visit_file(romfs_context* ctx, u32 fileoffset, u32 depth, u32 actions, filepath* rootpath);
 void romfs_extract_datafile(romfs_context* ctx, u64 offset, u64 size, filepath* path);
+ssize_t romfs_read_file(romfs_context* ctx, u32 entryoffset, char* buf, off_t offset, size_t size);
 void romfs_process(romfs_context* ctx, u32 actions);
 void romfs_print(romfs_context* ctx);
 

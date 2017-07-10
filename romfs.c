@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <wchar.h>
 
 #include "types.h"
@@ -282,6 +283,36 @@ void romfs_visit_file(romfs_context* ctx, u32 fileoffset, u32 depth, u32 actions
 
 	if (siblingoffset != (~0))
 		romfs_visit_file(ctx, siblingoffset, depth, actions, rootpath);
+}
+
+ssize_t romfs_read_file(romfs_context* ctx, u32 entryoffset, char* buf, off_t offset, size_t size)
+{
+	romfs_fileentry entry;
+	if (!romfs_fileblock_readentry(ctx, entryoffset, &entry)) {
+		return -ENOENT;
+	}
+
+	u64 fileoffset = getle64(entry.dataoffset);
+	u64 filesize = getle64(entry.datasize);
+
+	// TODO: crypto
+
+	if (offset < 0 || offset >= filesize) {
+		return 0;
+	}
+
+	fseeko(ctx->file, ctx->datablockoffset + fileoffset, SEEK_SET);
+	fseeko(ctx->file, offset, SEEK_CUR);
+
+	if (size > filesize - offset) {
+		size = filesize - offset;
+	}
+
+	if (fread(buf, 1, size, ctx->file) != size) {
+		return -errno;
+	}
+
+	return size;
 }
 
 void romfs_extract_datafile(romfs_context* ctx, u64 offset, u64 size, filepath* path)
