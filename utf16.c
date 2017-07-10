@@ -16,7 +16,7 @@ char* utf16to8(u8* s, size_t len) {
 	}
 
 	// XXX iconv is ridiculously heavyweight for this
-	cd = iconv_open("UTF-8", "UTF-16");
+	cd = iconv_open("UTF-8", "UTF-16LE");
 	in = (char*)s;
 	inlen = len;
 	outlen = len;
@@ -25,8 +25,13 @@ char* utf16to8(u8* s, size_t len) {
 	tlen = outlen - 1;
 	for (;;) {
 		if (iconv(cd, &in, &inlen, &t, &tlen) == (size_t)-1) {
-			size_t converted = t - out;
 			if (errno == E2BIG) {
+				// resize output buffer if necessary.
+				// tbh this will never happen.
+				// you'd have to have a string full of
+				// japanese or smth for utf16->utf8 to
+				// result in expansion
+				size_t converted = t - out;
 				outlen *= 2;
 				out = realloc(out, outlen*2);
 				t = out + converted;
