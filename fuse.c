@@ -13,6 +13,7 @@
 #include "ncsd.h"
 #include "exefs.h"
 #include "romfs.h"
+#include "utf16.h"
 
 enum {
 	Root,
@@ -36,6 +37,7 @@ struct node {
 
 	// romfs
 	int diroffset;
+	int fileoffset;
 
 	// for virtual files
 	char* data;
@@ -170,16 +172,39 @@ void ctrfuse_init_romfs(struct node* node) {
 	struct node** tail = &node->child;
 	while (diroffset != (u32)~0) {
 		struct node* node;
+		romfs_direntry entry;
 		if (!romfs_dirblock_readentry(ctx, diroffset, &entry)) {
 			fprintf(stderr, "error reading direntry %d\n", diroffset);
-			return;
+			break;
 		}
-		node = newnode(RomfsDir, (char*)entry.name);
+		char* name = utf16to8(entry.name, getle32(entry.namesize));
+		node = newnode(RomfsDir, name);
+		free(name);
 		node->ctx = ctx;
 		node->diroffset = diroffset;
 		*tail = node;
 		tail = &node->next;
 		diroffset = getle32(entry.siblingoffset);
+	}
+
+	int fileoffset = getle32(entry.fileoffset);
+	while (fileoffset != (u32)~0) {
+		romfs_fileentry entry;
+		struct node* node;
+
+		if (!romfs_fileblock_readentry(ctx, fileoffset, &entry)) {
+			fprintf(stderr, "error reading fileentry %d\n", fileoffset);
+			break;
+		}
+
+		char* name = utf16to8(entry.name, getle32(entry.namesize));
+		node = newnode(RomfsFile, name);
+		free(name);
+		node->ctx = ctx;
+		node->fileoffset = fileoffset;
+		*tail = node;
+		tail = &node->next;
+		fileoffset = getle32(entry.siblingoffset);
 	}
 }
 
